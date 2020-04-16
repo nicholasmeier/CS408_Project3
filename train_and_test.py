@@ -9,13 +9,28 @@ from tensorflow.keras.utils import Sequence
 from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
 
+# imports from ATT
+from bs4 import BeautifulSoup
 
-#import changes for INDRNN
-from ind_rnn import IndRNN
-from keras.preprocessing import sequence
-from keras.models import Sequential
-from keras.layers import Dense, Embedding, BatchNormalization
-from keras.callbacks import ModelCheckpoint
+import sys
+import os
+os.environ['KERAS_BACKEND']='tensorflow'
+
+from tensorflow.keras.preprocessing.text import Tokenizer, text_to_word_sequence
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras import utils
+from tensorflow.keras.utils import to_categorical
+
+from tensorflow.keras.layers import Embedding
+from tensorflow.keras.layers import Dense, Input, Flatten
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, Embedding, Concatenate, Dropout, LSTM, GRU, Bidirectional, TimeDistributed
+from tensorflow.keras.models import Model
+
+from tensorflow.keras import backend as K
+
+from tensorflow.keras.layers import Layer, InputSpec
+from tensorflow.keras import initializers
+
 
 with open('data/y_train.pickle', 'rb') as handle:
     Y_train = pickle.load(handle)
@@ -42,17 +57,56 @@ Y_valid = Y_valid[:25000]
 # Encode training, valid and test instances
 encoder = tfds.features.text.TokenTextEncoder(vocabulary_set)
 
-# Model Definition
-model = Sequential()
-model.add(Embedding(max_features, 128, input_shape=(maxlen,)))
-model.add(IndRNN(128, recurrent_clip_min=-1, recurrent_clip_max=-1, dropout=0.0, recurrent_dropout=0.0,
-                 return_sequences=True))
-model.add(IndRNN(128, recurrent_clip_min=-1, recurrent_clip_max=-1, dropout=0.0, recurrent_dropout=0.0,
-                 return_sequences=False))
-model.add(Dense(1, activation='sigmoid'))
+class AttLayer(Layer):
+    def __init__(self, attention_dim):
+        self.init = initializers.get('normal')
+        self.supports_masking = True
+        self.attention_dim = attention_dim
+        super(AttLayer, self).__init__()
+
+    def build(self, input_shape):
+        assert len(input_shape) == 3
+        self.W = K.variable(self.init((input_shape[-1], self.attention_dim)), name='W')
+        self.b = K.variable(self.init((self.attention_dim, )), name='b')
+        self.u = K.variable(self.init((self.attention_dim, 1)), name='u')
+        self.tw = [self.W, self.b, self.u]
+        super(AttLayer, self).build(input_shape)
+
+    def compute_mask(self, inputs, mask=None):
+        return None
+
+    def call(self, x, mask=None):
+        # size of x :[batch_size, sel_len, attention_dim]
+        # size of u :[batch_size, attention_dim]
+        # uit = tanh(xW+b)
+        uit = K.tanh(K.bias_add(K.dot(x, self.W), self.b))
+        ait = K.dot(uit, self.u)
+        ait = K.squeeze(ait, -1)
+
+        ait = K.exp(ait)
+
+        if mask is not None:
+            # Cast the mask to floatX to avoid float64 upcasting in theano
+            ait *= K.cast(mask, K.floatx())
+        ait /= K.cast(K.sum(ait, axis=1, keepdims=True) + K.epsilon(), K.floatx())
+        ait = K.expand_dims(ait)
+        weighted_input = x * ait
+        output = K.sum(weighted_input, axis=1)
+
+        return output
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], input_shape[-1])
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(encoder.vocab_size, 64),
+    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64,  return_sequences=True)),
+    AttLayer(64),
+    tf.keras.layers.Dense(1, activation='softmax')
+])
 
 model.compile(loss='binary_crossentropy',
-              optimizer='adam',
+              optimizer=tf.keras.optimizers.Adam(1e-4),
               metrics=['accuracy'])
 
 model.summary()
@@ -89,11 +143,12 @@ checkpointer = ModelCheckpoint('data/models/model-{epoch:02d}-{val_loss:.5f}.hdf
                                mode='min')
 
 callback_list = [checkpointer] #, , reduce_lr
+
 his1 = model.fit_generator(
                     generator=train_gen,
                     epochs=1,
-                    validation_data=valid_gen,
-                    callbacks=callback_list)
+                    validation_data=valid_gen)
+#                    callbacks=callback_list)
                     
                     
                     
