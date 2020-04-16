@@ -9,6 +9,14 @@ from tensorflow.keras.utils import Sequence
 from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
 
+
+#import changes for INDRNN
+from ind_rnn import IndRNN
+from keras.preprocessing import sequence
+from keras.models import Sequential
+from keras.layers import Dense, Embedding, BatchNormalization
+from keras.callbacks import ModelCheckpoint
+
 with open('data/y_train.pickle', 'rb') as handle:
     Y_train = pickle.load(handle)
 with open('data/y_test.pickle', 'rb') as handle:
@@ -35,17 +43,16 @@ Y_valid = Y_valid[:25000]
 encoder = tfds.features.text.TokenTextEncoder(vocabulary_set)
 
 # Model Definition
-model = tf.keras.Sequential([
-    tf.keras.layers.Embedding(encoder.vocab_size, 64),
-    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64,  return_sequences=True)),
-    tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32)),
-    tf.keras.layers.Dense(64, activation='relu'),
-    tf.keras.layers.Dropout(0.5),
-    tf.keras.layers.Dense(1, activation='sigmoid')
-])
+model = Sequential()
+model.add(Embedding(max_features, 128, input_shape=(maxlen,)))
+model.add(IndRNN(128, recurrent_clip_min=-1, recurrent_clip_max=-1, dropout=0.0, recurrent_dropout=0.0,
+                 return_sequences=True))
+model.add(IndRNN(128, recurrent_clip_min=-1, recurrent_clip_max=-1, dropout=0.0, recurrent_dropout=0.0,
+                 return_sequences=False))
+model.add(Dense(1, activation='sigmoid'))
 
 model.compile(loss='binary_crossentropy',
-              optimizer=tf.keras.optimizers.Adam(1e-4),
+              optimizer='adam',
               metrics=['accuracy'])
 
 model.summary()
