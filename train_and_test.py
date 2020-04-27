@@ -9,9 +9,7 @@ from tensorflow.keras.utils import Sequence
 from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
 
-# imports from ATT
-from bs4 import BeautifulSoup
-
+#ATT imports
 import sys
 import os
 os.environ['KERAS_BACKEND']='tensorflow'
@@ -98,11 +96,12 @@ class AttLayer(Layer):
     def compute_output_shape(self, input_shape):
         return (input_shape[0], input_shape[-1])
 
+
 model = tf.keras.Sequential([
     tf.keras.layers.Embedding(encoder.vocab_size, 64),
     tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64,  return_sequences=True)),
     AttLayer(64),
-    tf.keras.layers.Dense(1, activation='softmax')
+    tf.keras.layers.Dense(1, activation='sigmoid')
 ])
 
 model.compile(loss='binary_crossentropy',
@@ -143,15 +142,11 @@ checkpointer = ModelCheckpoint('data/models/model-{epoch:02d}-{val_loss:.5f}.hdf
                                mode='min')
 
 callback_list = [checkpointer] #, , reduce_lr
-
 his1 = model.fit_generator(
                     generator=train_gen,
                     epochs=1,
                     validation_data=valid_gen)
-#                    callbacks=callback_list)
-                    
-                    
-                    
+                    #callbacks=callback_list)
                     
 predIdxs = model.predict_generator(test_gen, verbose=1)
 
@@ -170,9 +165,3 @@ plt.title('Receiver operating characteristic example')
 plt.legend(loc="lower right")
 
 plt.savefig('auc_model.png')
-
-                    
-                    
-                    
-                    
-                    
