@@ -35,7 +35,7 @@ sklearn==0.0
 tensorboard==2.0.0
 tensorflow-datasets==1.2.0
 tensorflow-estimator==2.0.0
-tensorflow==2.0.0
+tensorflow==2.0.3
 tensorflow-metadata==0.15.0
 termcolor==1.1.0
 tqdm==4.36.1
